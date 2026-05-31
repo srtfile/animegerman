@@ -566,13 +566,23 @@ const AL_SERVERS = [
 ];
 const DEFAULT_SRV = 'mp-mal-dub';
 
-// ─── KIWI servers (via render backend) ────────────────────────────────
+// ─── RENDER backend (Kiwi + VidWish realid) ───────────────────────────
 const KIWI_RENDER = 'https://anime-stream-finder.onrender.com';
+
+// Kiwi servers — use player_url (mewcdn iframe)
 const KIWI_SERVERS = [
   { id:'kiwi-dub', label:'Kiwi DUB', icon:'🥝', type:'dub' },
   { id:'kiwi-sub', label:'Kiwi SUB', icon:'🥝', type:'sub' }
 ];
-// Cache for kiwi stream results: key = `${malId}-${ep}`
+
+// VidWish realid servers — use realid from Render API
+// URL format: https://vidwish.live/stream/s-2/{realid}/dub?autostart=true
+const VIDWISH_REALID_SERVERS = [
+  { id:'vw-rid-dub', label:'VidWish DUB', icon:'🎬', type:'dub' },
+  { id:'vw-rid-sub', label:'VidWish SUB', icon:'📺', type:'sub' }
+];
+
+// Cache for render API results: key = `${malId}-${ep}`
 const KIWI_CACHE = {};
 
 // ─── RiveStream /download servers (inline HLS player) ─────────────────
@@ -661,6 +671,42 @@ async function playKiwiServer(srvId) {
   const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
   if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
   toast(`${srv.label} loaded`, '🥝');
+}
+
+// ─── VIDWISH REALID PLAYER ────────────────────────────────────────────
+// Fetches realid from Render API then builds:
+// https://vidwish.live/stream/s-2/{realid}/dub?autostart=true
+async function playVidWishRealid(srvId) {
+  const srv = VIDWISH_REALID_SERVERS.find(s => s.id === srvId);
+  if (!srv) return;
+
+  restoreIframePlayer();
+  const iframe = document.getElementById('vplayer');
+  iframe.src = 'about:blank';
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Loading…`;
+  toast(`Fetching ${srv.label} stream…`, '🎬', 4000);
+
+  const data = await fetchKiwiStreams(CUR.malId, CUR.ep);
+  if (!data) {
+    toast(`${srv.label} failed — render may be sleeping`, '❌');
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Failed`;
+    return;
+  }
+
+  const realid = data.realid;
+  if (!realid) {
+    toast(`${srv.label} — realid not found for this episode`, '⚠️');
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · No realid`;
+    return;
+  }
+
+  const url = `https://vidwish.live/stream/s-2/${realid}/${srv.type}?autostart=true`;
+  iframe.src = url;
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · realid:${realid}`;
+  document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
+  const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
+  if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  toast(`${srv.label} loaded (realid: ${realid})`, '🎬');
 }
 
 // Restore normal iframe when switching away from Kiwi
@@ -1234,6 +1280,21 @@ function buildServerTabs(){
     (isDub?dubSide:subSide).appendChild(btn);
   });
 
+  // VidWish realid servers (via Render API)
+  VIDWISH_REALID_SERVERS.forEach(s=>{
+    const isDub=s.type==='dub';
+    const btn=document.createElement('button');
+    btn.className='srvtab '+(isDub?'dub-tab':'sub-tab');
+    btn.dataset.srvid=s.id;
+    btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
+    btn.onclick=()=>{
+      document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on'); CUR.srvId=s.id;
+      endedHandledForEp=-1; playCurrentEp();
+    };
+    (isDub?dubSide:subSide).appendChild(btn);
+  });
+
   el.appendChild(dubSide);
   el.appendChild(subSide);
 }
@@ -1261,14 +1322,21 @@ function appendAnilistTabs(alId){
 function playCurrentEp(){
   dismissEndedBar();
 
-  // Check if it's a Kiwi server
+  // Check if it's a Kiwi server (mewcdn player_url)
   const kiwiSrv = KIWI_SERVERS.find(s => s.id === CUR.srvId);
   if (kiwiSrv) {
     playKiwiServer(CUR.srvId);
     return;
   }
 
-  // Restore iframe if we were on Kiwi before
+  // Check if it's a VidWish realid server
+  const vwRidSrv = VIDWISH_REALID_SERVERS.find(s => s.id === CUR.srvId);
+  if (vwRidSrv) {
+    playVidWishRealid(CUR.srvId);
+    return;
+  }
+
+  // Restore iframe if we were on Kiwi/VidWish before
   restoreIframePlayer();
 
   const malSrv=MAL_SERVERS.find(s=>s.id===CUR.srvId);
