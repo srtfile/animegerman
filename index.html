@@ -556,9 +556,7 @@ const FALLBACK = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMw
 // ─── MEGAPLAY servers (with sandbox applied via iframe attribute) ───────
 const MAL_SERVERS = [
   { id:'mp-mal-dub', label:'MegaPlay DUB', icon:'🇺🇸', buildUrl:(id,ep)=>`https://megaplay.buzz/stream/mal/${id}/${ep}/dub` },
-  { id:'mp-mal-sub', label:'MegaPlay SUB', icon:'🎌', buildUrl:(id,ep)=>`https://megaplay.buzz/stream/mal/${id}/${ep}/sub` },
-  { id:'vw-mal-dub', label:'VidWish DUB',  icon:'🔊', buildUrl:(id,ep)=>`https://vidwish.live/stream/mal/${id}/${ep}/dub` },
-  { id:'vw-mal-sub', label:'VidWish SUB',  icon:'📺', buildUrl:(id,ep)=>`https://vidwish.live/stream/mal/${id}/${ep}/sub` }
+  { id:'mp-mal-sub', label:'MegaPlay SUB', icon:'🎌', buildUrl:(id,ep)=>`https://megaplay.buzz/stream/mal/${id}/${ep}/sub` }
 ];
 const AL_SERVERS = [
   { id:'mp-al-dub', label:'AniList DUB', icon:'🇺🇸', buildUrl:(id,ep)=>`https://megaplay.buzz/stream/ani/${id}/${ep}/dub` },
@@ -578,7 +576,7 @@ const KIWI_SERVERS = [
 // VidWish realid servers — use realid from Render API
 // URL format: https://vidwish.live/stream/s-2/{realid}/dub?autostart=true
 const VIDWISH_REALID_SERVERS = [
-  { id:'vw-rid-dub', label:'VidWish DUB', icon:'🎬', type:'dub' },
+  { id:'vw-rid-dub', label:'VidWish DUB', icon:'🔊', type:'dub' },
   { id:'vw-rid-sub', label:'VidWish SUB', icon:'📺', type:'sub' }
 ];
 
