@@ -381,7 +381,7 @@ header{position:sticky;top:0;z-index:200;background:rgba(5,5,15,.9);backdrop-fil
               allowfullscreen
               referrerpolicy="strict-origin-when-cross-origin"
               allow="autoplay; fullscreen"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation">
+              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups allow-popups-to-escape-sandbox">
             </iframe>
             <!-- Auto-next overlay -->
             <div class="autonext-overlay" id="autonextOverlay">
@@ -626,7 +626,9 @@ async function playKiwiServer(srvId) {
   const srv = KIWI_SERVERS.find(s => s.id === srvId);
   if (!srv) return;
 
-  // Show loading state in player
+  // Restore iframe (clean up any leftover kiwi video element)
+  restoreIframePlayer();
+
   const iframe = document.getElementById('vplayer');
   iframe.src = 'about:blank';
   document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Loading…`;
@@ -646,75 +648,19 @@ async function playKiwiServer(srvId) {
     return;
   }
 
-  const m3u8 = kiwiData.m3u8;
+  // Always use player_url (mewcdn.online/player/plyr.php#...) in the iframe
   const playerUrl = kiwiData.player_url;
+  if (!playerUrl) {
+    toast(`${srv.label} — no player URL`, '❌');
+    return;
+  }
 
+  iframe.src = playerUrl;
   document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}`;
   document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
-
-  // Try inline HLS first (m3u8), fallback to player_url in iframe
-  if (m3u8 && (m3u8.includes('.m3u8') || m3u8.includes('m3u8'))) {
-    playKiwiHlsInline(m3u8, playerUrl, srv.label);
-  } else if (playerUrl) {
-    iframe.src = playerUrl;
-    toast(`${srv.label} loaded`, '🥝');
-  } else {
-    toast(`${srv.label} — no playable URL`, '❌');
-  }
-}
-
-// Plays Kiwi m3u8 inline using the existing anime iframe (HLS.js)
-// We swap the iframe for a video element temporarily
-function playKiwiHlsInline(m3u8Url, fallbackUrl, label) {
-  // Reuse the existing vid-ratio container — hide iframe, show video
-  const iframe = document.getElementById('vplayer');
-  let videoEl = document.getElementById('kiwi-video');
-
-  if (!videoEl) {
-    videoEl = document.createElement('video');
-    videoEl.id = 'kiwi-video';
-    videoEl.controls = true;
-    videoEl.autoplay = true;
-    videoEl.playsInline = true;
-    videoEl.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:#000;object-fit:contain;z-index:5;display:none';
-    iframe.parentNode.appendChild(videoEl);
-  }
-
-  // Destroy any previous HLS on kiwi video
-  if (window._kiwiHls) { try { window._kiwiHls.destroy(); } catch(e){} window._kiwiHls = null; }
-
-  iframe.style.display = 'none';
-  videoEl.style.display = 'block';
-  videoEl.src = '';
-
-  function onError() {
-    // Fallback to iframe with player_url
-    videoEl.style.display = 'none';
-    iframe.style.display = 'block';
-    if (fallbackUrl) {
-      iframe.src = fallbackUrl;
-      toast(`${label} — using player fallback`, '⚠️');
-    } else {
-      toast(`${label} stream failed`, '❌');
-    }
-  }
-
-  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-    window._kiwiHls = new Hls({ enableWorker: true, lowLatencyMode: false });
-    window._kiwiHls.loadSource(m3u8Url);
-    window._kiwiHls.attachMedia(videoEl);
-    window._kiwiHls.on(Hls.Events.MANIFEST_PARSED, () => {
-      videoEl.play().catch(()=>{});
-      toast(`${label} playing`, '🥝');
-    });
-    window._kiwiHls.on(Hls.Events.ERROR, (evt, d) => { if (d.fatal) onError(); });
-  } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-    videoEl.src = m3u8Url;
-    videoEl.onloadeddata = () => { videoEl.play().catch(()=>{}); toast(`${label} playing`, '🥝'); };
-    videoEl.onerror = onError;
-  } else {
-    onError();
-  }
+  const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
+  if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  toast(`${srv.label} loaded`, '🥝');
 }
 
 // Restore normal iframe when switching away from Kiwi
@@ -726,7 +672,7 @@ function restoreIframePlayer() {
     videoEl.style.display = 'none';
     if (window._kiwiHls) { try { window._kiwiHls.destroy(); } catch(e){} window._kiwiHls = null; }
   }
-  iframe.style.display = 'block';
+  if (iframe) iframe.style.display = 'block';
 }
 
 function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem('anistream_settings4')); if(s) Object.assign(SETTINGS,s); }catch{} }
