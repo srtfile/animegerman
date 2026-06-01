@@ -649,6 +649,7 @@ function getHianimeUrl(data, epNum, type, serverGroup) {
 
 // Play a Hianime_multi server (sub or dub)
 async function playHianimeServer(type, serverGroup) {
+  console.log(`[Hianime] Playing ${type} ${serverGroup} for MAL ${CUR.malId} Ep ${CUR.ep}`);
   restoreIframePlayer();
   const iframe = document.getElementById('vplayer');
   iframe.src = 'about:blank';
@@ -658,18 +659,22 @@ async function playHianimeServer(type, serverGroup) {
 
   const data = await fetchHianimeData(CUR.malId);
   if (!data) {
+    console.warn(`[Hianime] Anime MAL ${CUR.malId} not found in index`);
     toast(`Hianime_multi — anime not in index (MAL ${CUR.malId})`, '⚠️');
     document.getElementById('wep-lbl').textContent = label + ' · Not in index';
     return;
   }
 
+  console.log(`[Hianime] Found data for ${data.anime_name}, ${data.episodes?.length || 0} episodes`);
   const url = getHianimeUrl(data, CUR.ep, type, serverGroup);
   if (!url) {
+    console.warn(`[Hianime] No URL for ${type} ${serverGroup} Ep ${CUR.ep}`);
     toast(`Hianime ${type.toUpperCase()} ${serverGroup} — not available for Ep ${CUR.ep}`, '⚠️');
     document.getElementById('wep-lbl').textContent = label + ' · Not available';
     return;
   }
 
+  console.log(`[Hianime] Loading URL: ${url}`);
   iframe.src = url;
   document.getElementById('wep-lbl').textContent = label;
   document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
@@ -1439,11 +1444,15 @@ function buildHianimeDropdown(type) {
   mainBtn.setAttribute('aria-expanded', 'false');
   mainBtn.onclick = (e) => {
     e.stopPropagation();
+    e.preventDefault();
     const isOpen = wrap.classList.contains('open');
     closeAllHianimeDropdowns();
     if (!isOpen) {
-      wrap.classList.add('open');
-      mainBtn.setAttribute('aria-expanded', 'true');
+      // Use setTimeout to avoid race condition with global click listener
+      setTimeout(() => {
+        wrap.classList.add('open');
+        mainBtn.setAttribute('aria-expanded', 'true');
+      }, 10);
     }
   };
 
@@ -1466,6 +1475,7 @@ function buildHianimeDropdown(type) {
     btn.innerHTML = `<span class="srv-dot"></span>${srv}`;
     btn.onclick = (e) => {
       e.stopPropagation();
+      e.preventDefault();
       // Update active sub-server
       if (isDub) HIANIME_CUR_DUB_SRV = srv;
       else        HIANIME_CUR_SUB_SRV = srv;
@@ -1474,6 +1484,7 @@ function buildHianimeDropdown(type) {
       btn.classList.add('on');
       // Mark main button as active, deactivate all other server tabs
       document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
+      document.querySelectorAll('.hianime-main-btn').forEach(b => b.classList.remove('on'));
       mainBtn.classList.add('on');
       CUR.srvId = `hianime-${type}-${srv}`;
       endedHandledForEp = -1;
@@ -1496,8 +1507,12 @@ function closeAllHianimeDropdowns() {
   });
 }
 
-// Close dropdowns when clicking outside
-document.addEventListener('click', () => closeAllHianimeDropdowns());
+// Close dropdowns when clicking outside (with delay to avoid immediate closure)
+document.addEventListener('click', (e) => {
+  // Don't close if clicking on hianime elements
+  if (e.target.closest('.hianime-wrap')) return;
+  closeAllHianimeDropdowns();
+});
 
 function appendAnilistTabs(alId){
   const el=document.getElementById('srvcats');
