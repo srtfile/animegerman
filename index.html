@@ -1304,13 +1304,13 @@ async function loadTmdbSimilar(id, type){
 }
 
 // ─── OPEN ANIME ───────────────────────────────────────────────────────
-function openAnime(a){
+async function openAnime(a){
   CUR.anime=a; CUR.malId=a.mal_id; CUR.alId=null; CUR.ep=1; CUR.srvId=DEFAULT_SRV;
   endedHandledForEp=-1;
   restoreIframePlayer(); // clean up any kiwi video
   showView('v-watch');
   renderWatchInfo(a);
-  buildEpGrid(a);
+  await buildEpGrid(a);
   buildServerTabs();
   updateToggle('autoplayToggle',SETTINGS.autoplay);
   updateToggle('autonextToggle',SETTINGS.autonext);
@@ -1346,8 +1346,31 @@ function makeAnimeCard(a){
   c.onclick=()=>openAnime(a); return c;
 }
 
-function buildEpGrid(a){
-  const total=Math.max(a.episodes||1,1);
+async function buildEpGrid(a){
+  let total = a.episodes;
+  
+  // If episodes is null or undefined (ongoing anime), try to get from Hianime data
+  if (!total && a.mal_id) {
+    console.log(`[buildEpGrid] Episodes is null for MAL ${a.mal_id}, checking Hianime data...`);
+    
+    // Show loading state
+    const grid=document.getElementById('epgrid');
+    grid.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);grid-column:1/-1"><div class="spin"></div><div>Loading episodes...</div></div>';
+    document.getElementById('epcnt').textContent='? eps';
+    
+    const hianimeData = await fetchHianimeData(a.mal_id);
+    if (hianimeData && hianimeData.episodes && Array.isArray(hianimeData.episodes)) {
+      total = hianimeData.episodes.length;
+      console.log(`[buildEpGrid] Found ${total} episodes in Hianime data`);
+    } else {
+      // Fallback: use 1200 for ongoing anime (covers most long-running series)
+      total = 1200;
+      console.log(`[buildEpGrid] No Hianime data, using fallback: ${total} episodes`);
+    }
+  }
+  
+  total = Math.max(total || 1, 1);
+  
   const grid=document.getElementById('epgrid'); grid.innerHTML='';
   document.getElementById('epcnt').textContent=`${total} eps`;
   for(let i=1;i<=total;i++){
