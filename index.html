@@ -1371,7 +1371,14 @@ async function buildEpGrid(a){
     try {
       // Step 1: Fetch first page to get last_visible_page
       const res1 = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=1`);
-      if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
+      
+      if (!res1.ok) {
+        if (res1.status === 429) {
+          console.warn('[buildEpGrid] Rate limited by Jikan API');
+          throw new Error('Rate limited - please wait a moment');
+        }
+        throw new Error(`HTTP ${res1.status}`);
+      }
       
       const data1 = await res1.json();
       
@@ -1389,7 +1396,7 @@ async function buildEpGrid(a){
       
       // Step 2: Jump to last_visible_page
       if (lastVisiblePage > 1) {
-        await new Promise(resolve => setTimeout(resolve, 350)); // Rate limit delay
+        await new Promise(resolve => setTimeout(resolve, 500)); // Increased delay for rate limiting
         
         let currentPage = lastVisiblePage;
         let hasNextPage = true;
@@ -1398,7 +1405,14 @@ async function buildEpGrid(a){
         // Step 3: Keep checking pages until has_next_page is false
         while (hasNextPage) {
           const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=${currentPage}`);
-          if (!res.ok) break;
+          
+          if (!res.ok) {
+            if (res.status === 429) {
+              console.warn('[buildEpGrid] Rate limited, stopping pagination');
+              break;
+            }
+            break;
+          }
           
           const data = await res.json();
           
@@ -1417,7 +1431,7 @@ async function buildEpGrid(a){
           
           if (hasNextPage) {
             currentPage++;
-            await new Promise(resolve => setTimeout(resolve, 350)); // Rate limit delay
+            await new Promise(resolve => setTimeout(resolve, 500)); // Increased delay for rate limiting
           }
         }
         
@@ -1440,6 +1454,9 @@ async function buildEpGrid(a){
       
     } catch(e) {
       console.warn('[buildEpGrid] Jikan episodes API failed:', e);
+      // Fallback: use a reasonable default for currently airing anime
+      total = 100;
+      console.log(`[buildEpGrid] Using fallback: ${total} episodes`);
     }
   } else if (!total) {
     // Not currently airing but episodes is null - use default
@@ -1462,16 +1479,6 @@ async function buildEpGrid(a){
     if (cachedTitles[i]) {
       btn.title = cachedTitles[i];
     }
-    
-    btn.onclick=()=>{
-      document.querySelectorAll('.epbtn').forEach(b=>b.classList.remove('on'));
-      btn.classList.add('on'); CUR.ep=i;
-      dismissEndedBar(); endedHandledForEp=-1;
-      playCurrentEp();
-    };
-    grid.appendChild(btn);
-  }
-}
     
     btn.onclick=()=>{
       document.querySelectorAll('.epbtn').forEach(b=>b.classList.remove('on'));
