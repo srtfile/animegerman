@@ -588,6 +588,7 @@ const DEFAULT_SRV = 'mp-mal-dub';
 const HIANIME_INDEX_URL = 'https://raw.githubusercontent.com/srtfile/alist/main/index.json';
 let   HIANIME_INDEX     = null;   // array of index entries after first fetch
 const HIANIME_DATA_CACHE = {};    // mal_id → parsed episode JSON
+const EPISODE_TITLES_CACHE = {};  // mal_id → { epNum: title }
 
 // Sub-server definitions (keys match the JSON server group names)
 const HIANIME_SUB_SERVERS  = ['HD-1','HD-2','StreamHG','Earnvids'];
@@ -655,6 +656,10 @@ async function playHianimeServer(type, serverGroup) {
   restoreIframePlayer();
   const iframe = document.getElementById('vplayer');
   
+  // Get episode title if available
+  const epTitle = EPISODE_TITLES_CACHE[CUR.malId]?.[CUR.ep] || '';
+  const epTitleSuffix = epTitle ? ` - ${epTitle}` : '';
+  
   // Remove sandbox for StreamHG, Earnvids, and Doodstream servers
   if (serverGroup === 'StreamHG' || serverGroup === 'Earnvids' || serverGroup === 'Doodstream') {
     iframe.removeAttribute('sandbox');
@@ -665,7 +670,7 @@ async function playHianimeServer(type, serverGroup) {
   }
   
   iframe.src = 'about:blank';
-  const label = `Hianime ${type.toUpperCase()} · ${serverGroup} · Ep ${CUR.ep}`;
+  const label = `Hianime ${type.toUpperCase()} · ${serverGroup} · Ep ${CUR.ep}${epTitleSuffix}`;
   document.getElementById('wep-lbl').textContent = label + ' · Loading…';
   toast(`Loading Hianime ${type.toUpperCase()} ${serverGroup}…`, '🌸', 4000);
 
@@ -1348,6 +1353,7 @@ function makeAnimeCard(a){
 
 async function buildEpGrid(a){
   let total = a.episodes;
+  let episodeTitles = {};
   
   // If episodes is null or undefined (ongoing anime), fetch from Jikan episodes API
   if (!total && a.mal_id) {
@@ -1359,24 +1365,48 @@ async function buildEpGrid(a){
     document.getElementById('epcnt').textContent='? eps';
     
     try {
-      // Fetch first page to get pagination info with total count
-      const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=1`);
-      if (res.ok) {
+      // Fetch pages until has_next_page is false
+      let page = 1;
+      let hasNextPage = true;
+      let lastEpisodeNum = 0;
+      
+      while (hasNextPage) {
+        const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=${page}`);
+        if (!res.ok) break;
+        
         const data = await res.json();
-        // Get total episodes from pagination data
-        if (data.pagination && data.pagination.items && data.pagination.items.total) {
-          total = data.pagination.items.total;
-          console.log(`[buildEpGrid] Found ${total} total episodes from Jikan API pagination`);
-        } else if (data.pagination && data.pagination.last_visible_page) {
-          // Calculate from last page (100 episodes per page)
-          total = data.pagination.last_visible_page * 100;
-          console.log(`[buildEpGrid] Calculated ${total} episodes from ${data.pagination.last_visible_page} pages`);
-        } else if (data.data && Array.isArray(data.data)) {
-          // If no pagination info, use data length
-          total = data.data.length;
-          console.log(`[buildEpGrid] Using ${total} episodes from first page (no pagination info)`);
+        
+        // Store episode titles
+        if (data.data && Array.isArray(data.data)) {
+          data.data.forEach(ep => {
+            if (ep.mal_id) {
+              episodeTitles[ep.mal_id] = ep.title || `Episode ${ep.mal_id}`;
+              lastEpisodeNum = Math.max(lastEpisodeNum, ep.mal_id);
+            }
+          });
+        }
+        
+        // Check if there's a next page
+        if (data.pagination) {
+          hasNextPage = data.pagination.has_next_page === true;
+          console.log(`[buildEpGrid] Page ${page}: has_next_page=${hasNextPage}, last_visible_page=${data.pagination.last_visible_page || 'N/A'}`);
+          
+          if (hasNextPage) {
+            page++;
+            // Add small delay to respect rate limits (Jikan has 3 req/sec limit)
+            await new Promise(resolve => setTimeout(resolve, 350));
+          }
+        } else {
+          hasNextPage = false;
         }
       }
+      
+      total = lastEpisodeNum;
+      console.log(`[buildEpGrid] Found ${total} episodes from Jikan episodes API (${page} pages)`);
+      
+      // Cache the episode titles
+      EPISODE_TITLES_CACHE[a.mal_id] = episodeTitles;
+      
     } catch(e) {
       console.warn('[buildEpGrid] Jikan episodes API failed:', e);
     }
@@ -1384,12 +1414,21 @@ async function buildEpGrid(a){
   
   total = Math.max(total || 1, 1);
   
+  // Get cached episode titles if available
+  const cachedTitles = EPISODE_TITLES_CACHE[a.mal_id] || episodeTitles;
+  
   const grid=document.getElementById('epgrid'); grid.innerHTML='';
   document.getElementById('epcnt').textContent=`${total} eps`;
   for(let i=1;i<=total;i++){
     const btn=document.createElement('button');
     btn.className='epbtn'+(i===1?' on':'');
     btn.textContent=i; btn.id=`epbtn-${i}`;
+    
+    // Add title attribute for hover tooltip
+    if (cachedTitles[i]) {
+      btn.title = cachedTitles[i];
+    }
+    
     btn.onclick=()=>{
       document.querySelectorAll('.epbtn').forEach(b=>b.classList.remove('on'));
       btn.classList.add('on'); CUR.ep=i;
@@ -1551,6 +1590,10 @@ function appendAnilistTabs(alId){
 function playCurrentEp(){
   dismissEndedBar();
 
+  // Get episode title if available
+  const epTitle = EPISODE_TITLES_CACHE[CUR.malId]?.[CUR.ep] || '';
+  const epTitleSuffix = epTitle ? ` - ${epTitle}` : '';
+
   // Check if it's a Hianime_multi server
   if (CUR.srvId && CUR.srvId.startsWith('hianime-')) {
     // Format: hianime-{type}-{serverGroup}  e.g. hianime-dub-HD-1
@@ -1586,9 +1629,9 @@ function playCurrentEp(){
   const malSrv=MAL_SERVERS.find(s=>s.id===CUR.srvId);
   const alSrv=AL_SERVERS.find(s=>s.id===CUR.srvId);
   let url, label;
-  if(malSrv){ url=malSrv.buildUrl(CUR.malId,CUR.ep); label=`${malSrv.label} · Ep ${CUR.ep}`; }
-  else if(alSrv&&CUR.alId){ url=alSrv.buildUrl(CUR.alId,CUR.ep); label=`${alSrv.label} · Ep ${CUR.ep}`; }
-  else{ url=MAL_SERVERS[0].buildUrl(CUR.malId,CUR.ep); label=`${MAL_SERVERS[0].label} · Ep ${CUR.ep}`; }
+  if(malSrv){ url=malSrv.buildUrl(CUR.malId,CUR.ep); label=`${malSrv.label} · Ep ${CUR.ep}${epTitleSuffix}`; }
+  else if(alSrv&&CUR.alId){ url=alSrv.buildUrl(CUR.alId,CUR.ep); label=`${alSrv.label} · Ep ${CUR.ep}${epTitleSuffix}`; }
+  else{ url=MAL_SERVERS[0].buildUrl(CUR.malId,CUR.ep); label=`${MAL_SERVERS[0].label} · Ep ${CUR.ep}${epTitleSuffix}`; }
   iframe.src=url;
   document.getElementById('wep-lbl').textContent=label;
   document.querySelectorAll('.epbtn').forEach((b,i)=>b.classList.toggle('on',i+1===CUR.ep));
