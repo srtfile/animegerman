@@ -1376,7 +1376,6 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
-      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
@@ -1392,7 +1391,6 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
-      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
@@ -1408,108 +1406,48 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
-      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
     (isDub?dubSide:subSide).appendChild(btn);
   });
 
-  // ── Hianime_multi DUB dropdown ──
-  dubSide.appendChild(buildHianimeDropdown('dub'));
-  // ── Hianime_multi SUB dropdown ──
-  subSide.appendChild(buildHianimeDropdown('sub'));
+  // ── Hianime_multi servers (all visible, no dropdown) ──
+  HIANIME_DUB_SERVERS.forEach(srv => {
+    const btn = document.createElement('button');
+    btn.className = 'srvtab dub-tab';
+    btn.dataset.srvid = `hianime-dub-${srv}`;
+    btn.innerHTML = `<span class="dot"></span>🌸 ${srv} DUB`;
+    btn.onclick = () => {
+      document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      CUR.srvId = `hianime-dub-${srv}`;
+      HIANIME_CUR_DUB_SRV = srv;
+      endedHandledForEp = -1;
+      playCurrentEp();
+    };
+    dubSide.appendChild(btn);
+  });
+
+  HIANIME_SUB_SERVERS.forEach(srv => {
+    const btn = document.createElement('button');
+    btn.className = 'srvtab sub-tab';
+    btn.dataset.srvid = `hianime-sub-${srv}`;
+    btn.innerHTML = `<span class="dot"></span>🌸 ${srv} SUB`;
+    btn.onclick = () => {
+      document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      CUR.srvId = `hianime-sub-${srv}`;
+      HIANIME_CUR_SUB_SRV = srv;
+      endedHandledForEp = -1;
+      playCurrentEp();
+    };
+    subSide.appendChild(btn);
+  });
 
   el.appendChild(dubSide);
   el.appendChild(subSide);
 }
-
-// Build the Hianime_multi dropdown widget for a given type ('sub' or 'dub')
-function buildHianimeDropdown(type) {
-  const isDub = type === 'dub';
-  const servers = isDub ? HIANIME_DUB_SERVERS : HIANIME_SUB_SERVERS;
-  const curSrv  = isDub ? HIANIME_CUR_DUB_SRV : HIANIME_CUR_SUB_SRV;
-  const wrapId  = `hianime-wrap-${type}`;
-
-  const wrap = document.createElement('div');
-  wrap.className = 'hianime-wrap';
-  wrap.id = wrapId;
-
-  // Main toggle button
-  const mainBtn = document.createElement('button');
-  mainBtn.className = 'hianime-main-btn' + (isDub ? ' dub-active' : '');
-  mainBtn.id = `hianime-main-${type}`;
-  mainBtn.innerHTML = `<span class="dot" style="width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.65"></span>🌸 Hianime_multi ${type.toUpperCase()} <span class="hianime-arrow">▾</span>`;
-  mainBtn.setAttribute('aria-haspopup', 'true');
-  mainBtn.setAttribute('aria-expanded', 'false');
-  mainBtn.onclick = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const isOpen = wrap.classList.contains('open');
-    closeAllHianimeDropdowns();
-    if (!isOpen) {
-      wrap.classList.add('open');
-      mainBtn.setAttribute('aria-expanded', 'true');
-    }
-  };
-
-  // Dropdown panel
-  const dropdown = document.createElement('div');
-  dropdown.className = 'hianime-dropdown';
-  dropdown.setAttribute('role', 'menu');
-
-  const sectionLbl = document.createElement('div');
-  sectionLbl.className = 'hianime-section-lbl ' + (isDub ? 'dub' : 'sub');
-  sectionLbl.textContent = isDub ? '🔊 DUB Servers' : '📺 SUB Servers';
-  dropdown.appendChild(sectionLbl);
-
-  servers.forEach(srv => {
-    const btn = document.createElement('button');
-    btn.className = 'hianime-srv-btn' + (isDub ? ' dub-btn' : '') + (srv === curSrv ? ' on' : '');
-    btn.dataset.hisrv = srv;
-    btn.dataset.hitype = type;
-    btn.setAttribute('role', 'menuitem');
-    btn.innerHTML = `<span class="srv-dot"></span>${srv}`;
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      // Update active sub-server
-      if (isDub) HIANIME_CUR_DUB_SRV = srv;
-      else        HIANIME_CUR_SUB_SRV = srv;
-      // Update button states inside this dropdown
-      dropdown.querySelectorAll('.hianime-srv-btn').forEach(b => b.classList.remove('on'));
-      btn.classList.add('on');
-      // Mark main button as active, deactivate all other server tabs
-      document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
-      document.querySelectorAll('.hianime-main-btn').forEach(b => b.classList.remove('on'));
-      mainBtn.classList.add('on');
-      CUR.srvId = `hianime-${type}-${srv}`;
-      endedHandledForEp = -1;
-      closeAllHianimeDropdowns();
-      playCurrentEp();
-    };
-    dropdown.appendChild(btn);
-  });
-
-  wrap.appendChild(mainBtn);
-  wrap.appendChild(dropdown);
-  return wrap;
-}
-
-function closeAllHianimeDropdowns() {
-  document.querySelectorAll('.hianime-wrap.open').forEach(w => {
-    w.classList.remove('open');
-    const mb = w.querySelector('.hianime-main-btn');
-    if (mb) mb.setAttribute('aria-expanded', 'false');
-  });
-}
-
-// Close dropdowns when clicking outside (with delay to avoid immediate closure)
-document.addEventListener('click', (e) => {
-  // Don't close if clicking on hianime elements or their children
-  if (e.target.closest('.hianime-wrap')) return;
-  closeAllHianimeDropdowns();
-});
 
 function appendAnilistTabs(alId){
   const el=document.getElementById('srvcats');
@@ -1524,14 +1462,13 @@ function appendAnilistTabs(alId){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
-      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
-    // Insert before the Hianime dropdown so it stays at the bottom
+    // Insert before the first Hianime server (they all have 🌸 in their innerHTML)
     const side = isDub ? dubSide : subSide;
-    const hiWrap = side.querySelector('.hianime-wrap');
-    if (hiWrap) side.insertBefore(btn, hiWrap);
+    const firstHianime = Array.from(side.querySelectorAll('.srvtab')).find(b => b.innerHTML.includes('🌸'));
+    if (firstHianime) side.insertBefore(btn, firstHianime);
     else side.appendChild(btn);
   });
 }
