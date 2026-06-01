@@ -1365,44 +1365,71 @@ async function buildEpGrid(a){
     document.getElementById('epcnt').textContent='? eps';
     
     try {
-      // Fetch pages until has_next_page is false
-      let page = 1;
-      let hasNextPage = true;
-      let lastEpisodeNum = 0;
+      // Step 1: Fetch first page to get last_visible_page
+      const res1 = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=1`);
+      if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
       
-      while (hasNextPage) {
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=${page}`);
-        if (!res.ok) break;
-        
-        const data = await res.json();
-        
-        // Store episode titles
-        if (data.data && Array.isArray(data.data)) {
-          data.data.forEach(ep => {
-            if (ep.mal_id) {
-              episodeTitles[ep.mal_id] = ep.title || `Episode ${ep.mal_id}`;
-              lastEpisodeNum = Math.max(lastEpisodeNum, ep.mal_id);
-            }
-          });
-        }
-        
-        // Check if there's a next page
-        if (data.pagination) {
-          hasNextPage = data.pagination.has_next_page === true;
-          console.log(`[buildEpGrid] Page ${page}: has_next_page=${hasNextPage}, last_visible_page=${data.pagination.last_visible_page || 'N/A'}`);
-          
-          if (hasNextPage) {
-            page++;
-            // Add small delay to respect rate limits (Jikan has 3 req/sec limit)
-            await new Promise(resolve => setTimeout(resolve, 350));
+      const data1 = await res1.json();
+      
+      // Store episode titles from page 1
+      if (data1.data && Array.isArray(data1.data)) {
+        data1.data.forEach(ep => {
+          if (ep.mal_id) {
+            episodeTitles[ep.mal_id] = ep.title || `Episode ${ep.mal_id}`;
           }
-        } else {
-          hasNextPage = false;
-        }
+        });
       }
       
-      total = lastEpisodeNum;
-      console.log(`[buildEpGrid] Found ${total} episodes from Jikan episodes API (${page} pages)`);
+      const lastVisiblePage = data1.pagination?.last_visible_page || 1;
+      console.log(`[buildEpGrid] Page 1: last_visible_page=${lastVisiblePage}, has_next_page=${data1.pagination?.has_next_page}`);
+      
+      // Step 2: Jump to last_visible_page
+      if (lastVisiblePage > 1) {
+        await new Promise(resolve => setTimeout(resolve, 350)); // Rate limit delay
+        
+        let currentPage = lastVisiblePage;
+        let hasNextPage = true;
+        let lastEpisodeNum = 0;
+        
+        // Step 3: Keep checking pages until has_next_page is false
+        while (hasNextPage) {
+          const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=${currentPage}`);
+          if (!res.ok) break;
+          
+          const data = await res.json();
+          
+          // Store episode titles
+          if (data.data && Array.isArray(data.data)) {
+            data.data.forEach(ep => {
+              if (ep.mal_id) {
+                episodeTitles[ep.mal_id] = ep.title || `Episode ${ep.mal_id}`;
+                lastEpisodeNum = Math.max(lastEpisodeNum, ep.mal_id);
+              }
+            });
+          }
+          
+          hasNextPage = data.pagination?.has_next_page === true;
+          console.log(`[buildEpGrid] Page ${currentPage}: has_next_page=${hasNextPage}, episodes on page=${data.data?.length || 0}, last_ep=${lastEpisodeNum}`);
+          
+          if (hasNextPage) {
+            currentPage++;
+            await new Promise(resolve => setTimeout(resolve, 350)); // Rate limit delay
+          }
+        }
+        
+        total = lastEpisodeNum;
+        console.log(`[buildEpGrid] Found ${total} episodes (final page: ${currentPage})`);
+      } else {
+        // Only 1 page, get last episode from page 1
+        let lastEp = 0;
+        if (data1.data && Array.isArray(data1.data)) {
+          data1.data.forEach(ep => {
+            if (ep.mal_id) lastEp = Math.max(lastEp, ep.mal_id);
+          });
+        }
+        total = lastEp;
+        console.log(`[buildEpGrid] Single page anime: ${total} episodes`);
+      }
       
       // Cache the episode titles
       EPISODE_TITLES_CACHE[a.mal_id] = episodeTitles;
@@ -1428,6 +1455,16 @@ async function buildEpGrid(a){
     if (cachedTitles[i]) {
       btn.title = cachedTitles[i];
     }
+    
+    btn.onclick=()=>{
+      document.querySelectorAll('.epbtn').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on'); CUR.ep=i;
+      dismissEndedBar(); endedHandledForEp=-1;
+      playCurrentEp();
+    };
+    grid.appendChild(btn);
+  }
+}
     
     btn.onclick=()=>{
       document.querySelectorAll('.epbtn').forEach(b=>b.classList.remove('on'));
