@@ -282,6 +282,25 @@ header{position:sticky;top:0;z-index:200;background:rgba(5,5,15,.9);backdrop-fil
 .hls-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(5,5,15,.92);color:#ff6b6b;font-size:13px;z-index:5;padding:24px;text-align:center;display:none}
 .hls-error.on{display:flex}
 .hls-error button{margin-top:8px;padding:8px 20px;border-radius:8px;background:var(--acc);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;font-size:13px}
+
+/* ─── HIANIME MULTI DROPDOWN ─── */
+.hianime-wrap{position:relative;display:inline-flex;flex-direction:column;gap:0}
+.hianime-main-btn{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 10px 6px 13px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);transition:all var(--tr);font-family:'DM Sans',sans-serif;white-space:nowrap;user-select:none}
+.hianime-main-btn:hover{border-color:var(--bordera);color:var(--text)}
+.hianime-main-btn.on{background:rgba(0,223,255,.1);border-color:rgba(0,223,255,.5);color:var(--acc3)}
+.hianime-main-btn.dub-active.on{background:rgba(249,115,22,.14);border-color:rgba(249,115,22,.6);color:#f97316}
+.hianime-arrow{font-size:10px;margin-left:2px;transition:transform var(--tr)}
+.hianime-wrap.open .hianime-arrow{transform:rotate(180deg)}
+.hianime-dropdown{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--bg2);border:1px solid var(--bordera);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 12px 40px rgba(0,0,0,.6);flex-direction:column;gap:4px}
+.hianime-wrap.open .hianime-dropdown{display:flex}
+.hianime-section-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;padding:4px 6px 2px;border-bottom:1px solid var(--border);margin-bottom:2px}
+.hianime-section-lbl.dub{color:#f97316;border-color:rgba(249,115,22,.3)}
+.hianime-section-lbl.sub{color:var(--acc3);border-color:rgba(0,223,255,.3)}
+.hianime-srv-btn{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted);background:none;border:none;font-family:'DM Sans',sans-serif;transition:all var(--tr);text-align:left;width:100%}
+.hianime-srv-btn:hover{background:var(--cardh);color:var(--text)}
+.hianime-srv-btn.on{background:rgba(0,223,255,.1);color:var(--acc3)}
+.hianime-srv-btn.dub-btn.on{background:rgba(249,115,22,.14);color:#f97316}
+.hianime-srv-btn .srv-dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.65;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -563,6 +582,101 @@ const AL_SERVERS = [
   { id:'mp-al-sub', label:'AniList SUB', icon:'🎌', buildUrl:(id,ep)=>`https://megaplay.buzz/stream/ani/${id}/${ep}/sub` }
 ];
 const DEFAULT_SRV = 'mp-mal-dub';
+
+// ─── HIANIME_MULTI index & cache ──────────────────────────────────────
+// Index fetched once from GitHub; maps mal_id → raw_url
+const HIANIME_INDEX_URL = 'https://raw.githubusercontent.com/srtfile/alist/main/index.json';
+let   HIANIME_INDEX     = null;   // array of index entries after first fetch
+const HIANIME_DATA_CACHE = {};    // mal_id → parsed episode JSON
+
+// Sub-server definitions (keys match the JSON server group names)
+const HIANIME_SUB_SERVERS  = ['HD-1','HD-2','StreamHG','Earnvids'];
+const HIANIME_DUB_SERVERS  = ['HD-1','HD-2','StreamHG','Earnvids'];
+
+// Active hianime sub-server selection (persists across episode changes)
+let HIANIME_CUR_SUB_SRV = 'HD-1';
+let HIANIME_CUR_DUB_SRV = 'HD-1';
+
+// Fetch & cache the index
+async function fetchHianimeIndex() {
+  if (HIANIME_INDEX) return HIANIME_INDEX;
+  try {
+    const r = await fetch(HIANIME_INDEX_URL);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    HIANIME_INDEX = await r.json();
+    return HIANIME_INDEX;
+  } catch(e) {
+    console.warn('Hianime index fetch failed:', e);
+    return null;
+  }
+}
+
+// Fetch & cache the per-anime episode data by mal_id
+async function fetchHianimeData(malId) {
+  if (HIANIME_DATA_CACHE[malId]) return HIANIME_DATA_CACHE[malId];
+  const index = await fetchHianimeIndex();
+  if (!index) return null;
+  const entry = index.find(e => e.mal_id === malId);
+  if (!entry) return null;
+  try {
+    const r = await fetch(entry.raw_url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    HIANIME_DATA_CACHE[malId] = data;
+    return data;
+  } catch(e) {
+    console.warn('Hianime data fetch failed:', e);
+    return null;
+  }
+}
+
+// Extract a streaming URL for a given episode, type (sub/dub), and server group
+function getHianimeUrl(data, epNum, type, serverGroup) {
+  const epIdx = epNum - 1;
+  const eps = data?.episodes;
+  if (!eps || !eps[epIdx]) return null;
+  const ep = eps[epIdx];
+  const typeData = ep[type]; // sub / dub / hsub
+  if (!typeData) return null;
+  const grp = typeData[serverGroup];
+  if (!grp) return null;
+  // Prefer embed URL (first key that doesn't end in _m3u8), fallback to m3u8
+  const keys = Object.keys(grp);
+  const embedKey = keys.find(k => !k.endsWith('_m3u8'));
+  const m3u8Key  = keys.find(k => k.endsWith('_m3u8'));
+  return grp[embedKey] || grp[m3u8Key] || null;
+}
+
+// Play a Hianime_multi server (sub or dub)
+async function playHianimeServer(type, serverGroup) {
+  restoreIframePlayer();
+  const iframe = document.getElementById('vplayer');
+  iframe.src = 'about:blank';
+  const label = `Hianime ${type.toUpperCase()} · ${serverGroup} · Ep ${CUR.ep}`;
+  document.getElementById('wep-lbl').textContent = label + ' · Loading…';
+  toast(`Loading Hianime ${type.toUpperCase()} ${serverGroup}…`, '🌸', 4000);
+
+  const data = await fetchHianimeData(CUR.malId);
+  if (!data) {
+    toast(`Hianime_multi — anime not in index (MAL ${CUR.malId})`, '⚠️');
+    document.getElementById('wep-lbl').textContent = label + ' · Not in index';
+    return;
+  }
+
+  const url = getHianimeUrl(data, CUR.ep, type, serverGroup);
+  if (!url) {
+    toast(`Hianime ${type.toUpperCase()} ${serverGroup} — not available for Ep ${CUR.ep}`, '⚠️');
+    document.getElementById('wep-lbl').textContent = label + ' · Not available';
+    return;
+  }
+
+  iframe.src = url;
+  document.getElementById('wep-lbl').textContent = label;
+  document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
+  const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
+  if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
+  toast(`Hianime ${type.toUpperCase()} ${serverGroup} loaded`, '🌸');
+}
 
 // ─── RENDER backend (Kiwi + VidWish realid) ───────────────────────────
 const KIWI_RENDER = 'https://anime-stream-finder.onrender.com';
@@ -1257,6 +1371,7 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
+      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
@@ -1272,6 +1387,7 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
+      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
@@ -1287,15 +1403,101 @@ function buildServerTabs(){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
+      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
     (isDub?dubSide:subSide).appendChild(btn);
   });
 
+  // ── Hianime_multi DUB dropdown ──
+  dubSide.appendChild(buildHianimeDropdown('dub'));
+  // ── Hianime_multi SUB dropdown ──
+  subSide.appendChild(buildHianimeDropdown('sub'));
+
   el.appendChild(dubSide);
   el.appendChild(subSide);
 }
+
+// Build the Hianime_multi dropdown widget for a given type ('sub' or 'dub')
+function buildHianimeDropdown(type) {
+  const isDub = type === 'dub';
+  const servers = isDub ? HIANIME_DUB_SERVERS : HIANIME_SUB_SERVERS;
+  const curSrv  = isDub ? HIANIME_CUR_DUB_SRV : HIANIME_CUR_SUB_SRV;
+  const wrapId  = `hianime-wrap-${type}`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'hianime-wrap';
+  wrap.id = wrapId;
+
+  // Main toggle button
+  const mainBtn = document.createElement('button');
+  mainBtn.className = 'hianime-main-btn' + (isDub ? ' dub-active' : '');
+  mainBtn.id = `hianime-main-${type}`;
+  mainBtn.innerHTML = `<span class="dot" style="width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.65"></span>🌸 Hianime_multi ${type.toUpperCase()} <span class="hianime-arrow">▾</span>`;
+  mainBtn.setAttribute('aria-haspopup', 'true');
+  mainBtn.setAttribute('aria-expanded', 'false');
+  mainBtn.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = wrap.classList.contains('open');
+    closeAllHianimeDropdowns();
+    if (!isOpen) {
+      wrap.classList.add('open');
+      mainBtn.setAttribute('aria-expanded', 'true');
+    }
+  };
+
+  // Dropdown panel
+  const dropdown = document.createElement('div');
+  dropdown.className = 'hianime-dropdown';
+  dropdown.setAttribute('role', 'menu');
+
+  const sectionLbl = document.createElement('div');
+  sectionLbl.className = 'hianime-section-lbl ' + (isDub ? 'dub' : 'sub');
+  sectionLbl.textContent = isDub ? '🔊 DUB Servers' : '📺 SUB Servers';
+  dropdown.appendChild(sectionLbl);
+
+  servers.forEach(srv => {
+    const btn = document.createElement('button');
+    btn.className = 'hianime-srv-btn' + (isDub ? ' dub-btn' : '') + (srv === curSrv ? ' on' : '');
+    btn.dataset.hisrv = srv;
+    btn.dataset.hitype = type;
+    btn.setAttribute('role', 'menuitem');
+    btn.innerHTML = `<span class="srv-dot"></span>${srv}`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      // Update active sub-server
+      if (isDub) HIANIME_CUR_DUB_SRV = srv;
+      else        HIANIME_CUR_SUB_SRV = srv;
+      // Update button states inside this dropdown
+      dropdown.querySelectorAll('.hianime-srv-btn').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      // Mark main button as active, deactivate all other server tabs
+      document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
+      mainBtn.classList.add('on');
+      CUR.srvId = `hianime-${type}-${srv}`;
+      endedHandledForEp = -1;
+      closeAllHianimeDropdowns();
+      playCurrentEp();
+    };
+    dropdown.appendChild(btn);
+  });
+
+  wrap.appendChild(mainBtn);
+  wrap.appendChild(dropdown);
+  return wrap;
+}
+
+function closeAllHianimeDropdowns() {
+  document.querySelectorAll('.hianime-wrap.open').forEach(w => {
+    w.classList.remove('open');
+    const mb = w.querySelector('.hianime-main-btn');
+    if (mb) mb.setAttribute('aria-expanded', 'false');
+  });
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => closeAllHianimeDropdowns());
 
 function appendAnilistTabs(alId){
   const el=document.getElementById('srvcats');
@@ -1310,6 +1512,7 @@ function appendAnilistTabs(alId){
     btn.innerHTML=`<span class="dot"></span>${s.icon} ${s.label}`;
     btn.onclick=()=>{
       document.querySelectorAll('.srvtab').forEach(b=>b.classList.remove('on'));
+      closeAllHianimeDropdowns();
       btn.classList.add('on'); CUR.srvId=s.id;
       endedHandledForEp=-1; playCurrentEp();
     };
@@ -1319,6 +1522,17 @@ function appendAnilistTabs(alId){
 
 function playCurrentEp(){
   dismissEndedBar();
+
+  // Check if it's a Hianime_multi server
+  if (CUR.srvId && CUR.srvId.startsWith('hianime-')) {
+    // Format: hianime-{type}-{serverGroup}  e.g. hianime-dub-HD-1
+    const parts = CUR.srvId.split('-');
+    // parts[0]='hianime', parts[1]=type, parts[2..]=serverGroup (may contain dashes)
+    const type = parts[1];
+    const serverGroup = parts.slice(2).join('-');
+    playHianimeServer(type, serverGroup);
+    return;
+  }
 
   // Check if it's a Kiwi server (mewcdn player_url)
   const kiwiSrv = KIWI_SERVERS.find(s => s.id === CUR.srvId);
@@ -1334,7 +1548,7 @@ function playCurrentEp(){
     return;
   }
 
-  // Restore iframe if we were on Kiwi/VidWish before
+  // Restore iframe if we were on Kiwi/VidWish/Hianime before
   restoreIframePlayer();
 
   const malSrv=MAL_SERVERS.find(s=>s.id===CUR.srvId);
