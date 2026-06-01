@@ -652,6 +652,16 @@ async function playHianimeServer(type, serverGroup) {
   console.log(`[Hianime] Playing ${type} ${serverGroup} for MAL ${CUR.malId} Ep ${CUR.ep}`);
   restoreIframePlayer();
   const iframe = document.getElementById('vplayer');
+  
+  // Remove sandbox for StreamHG and Earnvids servers
+  if (serverGroup === 'StreamHG' || serverGroup === 'Earnvids') {
+    iframe.removeAttribute('sandbox');
+    console.log(`[Hianime] Removed sandbox for ${serverGroup}`);
+  } else {
+    // Restore sandbox for other servers
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-popups allow-popups-to-escape-sandbox');
+  }
+  
   iframe.src = 'about:blank';
   const label = `Hianime ${type.toUpperCase()} · ${serverGroup} · Ep ${CUR.ep}`;
   document.getElementById('wep-lbl').textContent = label + ' · Loading…';
@@ -1504,13 +1514,17 @@ function playCurrentEp(){
   // Restore iframe if we were on Kiwi/VidWish/Hianime before
   restoreIframePlayer();
 
+  const iframe = document.getElementById('vplayer');
+  // Restore sandbox for MAL/AL servers
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-popups allow-popups-to-escape-sandbox');
+
   const malSrv=MAL_SERVERS.find(s=>s.id===CUR.srvId);
   const alSrv=AL_SERVERS.find(s=>s.id===CUR.srvId);
   let url, label;
   if(malSrv){ url=malSrv.buildUrl(CUR.malId,CUR.ep); label=`${malSrv.label} · Ep ${CUR.ep}`; }
   else if(alSrv&&CUR.alId){ url=alSrv.buildUrl(CUR.alId,CUR.ep); label=`${alSrv.label} · Ep ${CUR.ep}`; }
   else{ url=MAL_SERVERS[0].buildUrl(CUR.malId,CUR.ep); label=`${MAL_SERVERS[0].label} · Ep ${CUR.ep}`; }
-  document.getElementById('vplayer').src=url;
+  iframe.src=url;
   document.getElementById('wep-lbl').textContent=label;
   document.querySelectorAll('.epbtn').forEach((b,i)=>b.classList.toggle('on',i+1===CUR.ep));
   const activeEpBtn=document.getElementById(`epbtn-${CUR.ep}`);
