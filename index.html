@@ -1349,23 +1349,32 @@ function makeAnimeCard(a){
 async function buildEpGrid(a){
   let total = a.episodes;
   
-  // If episodes is null or undefined (ongoing anime), try to get from Hianime data
+  // If episodes is null or undefined (ongoing anime), fetch from Jikan episodes API
   if (!total && a.mal_id) {
-    console.log(`[buildEpGrid] Episodes is null for MAL ${a.mal_id}, checking Hianime data...`);
+    console.log(`[buildEpGrid] Episodes is null for MAL ${a.mal_id}, fetching from Jikan episodes API...`);
     
     // Show loading state
     const grid=document.getElementById('epgrid');
     grid.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);grid-column:1/-1"><div class="spin"></div><div>Loading episodes...</div></div>';
     document.getElementById('epcnt').textContent='? eps';
     
-    const hianimeData = await fetchHianimeData(a.mal_id);
-    if (hianimeData && hianimeData.episodes && Array.isArray(hianimeData.episodes)) {
-      total = hianimeData.episodes.length;
-      console.log(`[buildEpGrid] Found ${total} episodes in Hianime data`);
-    } else {
-      // Fallback: use 1200 for ongoing anime (covers most long-running series)
-      total = 1200;
-      console.log(`[buildEpGrid] No Hianime data, using fallback: ${total} episodes`);
+    try {
+      // Fetch first page to get pagination info
+      const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=1`);
+      if (res.ok) {
+        const data = await res.json();
+        // Get total episodes from pagination data
+        if (data.pagination && data.pagination.items) {
+          total = data.pagination.items.total;
+          console.log(`[buildEpGrid] Found ${total} episodes from Jikan episodes API`);
+        } else if (data.data && Array.isArray(data.data)) {
+          // If no pagination info, use data length
+          total = data.data.length;
+          console.log(`[buildEpGrid] Using ${total} episodes from first page (no pagination info)`);
+        }
+      }
+    } catch(e) {
+      console.warn('[buildEpGrid] Jikan episodes API failed:', e);
     }
   }
   
