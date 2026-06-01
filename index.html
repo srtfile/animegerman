@@ -592,10 +592,12 @@ const HIANIME_DATA_CACHE = {};    // mal_id → parsed episode JSON
 // Sub-server definitions (keys match the JSON server group names)
 const HIANIME_SUB_SERVERS  = ['HD-1','HD-2','StreamHG','Earnvids'];
 const HIANIME_DUB_SERVERS  = ['HD-1','HD-2','StreamHG','Earnvids'];
+const HIANIME_HSUB_SERVERS = ['HD-1','HD-2','StreamHG','Earnvids','Doodstream'];
 
 // Active hianime sub-server selection (persists across episode changes)
 let HIANIME_CUR_SUB_SRV = 'HD-1';
 let HIANIME_CUR_DUB_SRV = 'HD-1';
+let HIANIME_CUR_HSUB_SRV = 'HD-1';
 
 // Fetch & cache the index
 async function fetchHianimeIndex() {
@@ -653,8 +655,8 @@ async function playHianimeServer(type, serverGroup) {
   restoreIframePlayer();
   const iframe = document.getElementById('vplayer');
   
-  // Remove sandbox for StreamHG and Earnvids servers
-  if (serverGroup === 'StreamHG' || serverGroup === 'Earnvids') {
+  // Remove sandbox for StreamHG, Earnvids, and Doodstream servers
+  if (serverGroup === 'StreamHG' || serverGroup === 'Earnvids' || serverGroup === 'Doodstream') {
     iframe.removeAttribute('sandbox');
     console.log(`[Hianime] Removed sandbox for ${serverGroup}`);
   } else {
@@ -1377,6 +1379,14 @@ function buildServerTabs(){
   subLbl.innerHTML='<i class="fas fa-closed-captioning" style="margin-right:5px"></i>SUB';
   subSide.appendChild(subLbl);
 
+  // HSUB side (Hard-coded subtitles)
+  const hsubSide=document.createElement('div'); hsubSide.className='srvside';
+  const hsubLbl=document.createElement('div'); hsubLbl.className='srvsidelbl';
+  hsubLbl.innerHTML='<i class="fas fa-language" style="margin-right:5px"></i>HSUB';
+  hsubLbl.style.color='#22c55e';
+  hsubLbl.style.borderColor='rgba(34,197,94,.3)';
+  hsubSide.appendChild(hsubLbl);
+
   // MAL servers
   MAL_SERVERS.forEach(s=>{
     const isDub=s.id.includes('dub');
@@ -1455,13 +1465,32 @@ function buildServerTabs(){
     subSide.appendChild(btn);
   });
 
+  // ── Hianime HSUB servers (Hard-coded subtitles) ──
+  HIANIME_HSUB_SERVERS.forEach(srv => {
+    const btn = document.createElement('button');
+    btn.className = 'srvtab';
+    btn.dataset.srvid = `hianime-hsub-${srv}`;
+    btn.innerHTML = `<span class="dot"></span>🌸 ${srv} HSUB`;
+    btn.style.borderColor = 'rgba(34,197,94,.3)';
+    btn.onclick = () => {
+      document.querySelectorAll('.srvtab').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      CUR.srvId = `hianime-hsub-${srv}`;
+      HIANIME_CUR_HSUB_SRV = srv;
+      endedHandledForEp = -1;
+      playCurrentEp();
+    };
+    hsubSide.appendChild(btn);
+  });
+
   el.appendChild(dubSide);
   el.appendChild(subSide);
+  el.appendChild(hsubSide);
 }
 
 function appendAnilistTabs(alId){
   const el=document.getElementById('srvcats');
-  // Find existing DUB and SUB sides
+  // Find existing DUB, SUB, and HSUB sides
   const sides=el.querySelectorAll('.srvside');
   const dubSide=sides[0], subSide=sides[1];
 
