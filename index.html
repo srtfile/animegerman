@@ -1359,14 +1359,18 @@ async function buildEpGrid(a){
     document.getElementById('epcnt').textContent='? eps';
     
     try {
-      // Fetch first page to get pagination info
+      // Fetch first page to get pagination info with total count
       const res = await fetch(`https://api.jikan.moe/v4/anime/${a.mal_id}/episodes?page=1`);
       if (res.ok) {
         const data = await res.json();
         // Get total episodes from pagination data
-        if (data.pagination && data.pagination.items) {
+        if (data.pagination && data.pagination.items && data.pagination.items.total) {
           total = data.pagination.items.total;
-          console.log(`[buildEpGrid] Found ${total} episodes from Jikan episodes API`);
+          console.log(`[buildEpGrid] Found ${total} total episodes from Jikan API pagination`);
+        } else if (data.pagination && data.pagination.last_visible_page) {
+          // Calculate from last page (100 episodes per page)
+          total = data.pagination.last_visible_page * 100;
+          console.log(`[buildEpGrid] Calculated ${total} episodes from ${data.pagination.last_visible_page} pages`);
         } else if (data.data && Array.isArray(data.data)) {
           // If no pagination info, use data length
           total = data.data.length;
