@@ -291,7 +291,7 @@ header{position:sticky;top:0;z-index:200;background:rgba(5,5,15,.9);backdrop-fil
 .hianime-main-btn.dub-active.on{background:rgba(249,115,22,.14);border-color:rgba(249,115,22,.6);color:#f97316}
 .hianime-arrow{font-size:10px;margin-left:2px;transition:transform var(--tr)}
 .hianime-wrap.open .hianime-arrow{transform:rotate(180deg)}
-.hianime-dropdown{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--bg2);border:1px solid var(--bordera);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 12px 40px rgba(0,0,0,.6);flex-direction:column;gap:4px}
+.hianime-dropdown{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--bg2);border:1px solid var(--bordera);border-radius:10px;padding:8px;min-width:200px;box-shadow:0 12px 40px rgba(0,0,0,.6);flex-direction:column;gap:4px;display:none}
 .hianime-wrap.open .hianime-dropdown{display:flex}
 .hianime-section-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;padding:4px 6px 2px;border-bottom:1px solid var(--border);margin-bottom:2px}
 .hianime-section-lbl.dub{color:#f97316;border-color:rgba(249,115,22,.3)}
@@ -1448,11 +1448,8 @@ function buildHianimeDropdown(type) {
     const isOpen = wrap.classList.contains('open');
     closeAllHianimeDropdowns();
     if (!isOpen) {
-      // Use setTimeout to avoid race condition with global click listener
-      setTimeout(() => {
-        wrap.classList.add('open');
-        mainBtn.setAttribute('aria-expanded', 'true');
-      }, 10);
+      wrap.classList.add('open');
+      mainBtn.setAttribute('aria-expanded', 'true');
     }
   };
 
@@ -1509,7 +1506,7 @@ function closeAllHianimeDropdowns() {
 
 // Close dropdowns when clicking outside (with delay to avoid immediate closure)
 document.addEventListener('click', (e) => {
-  // Don't close if clicking on hianime elements
+  // Don't close if clicking on hianime elements or their children
   if (e.target.closest('.hianime-wrap')) return;
   closeAllHianimeDropdowns();
 });
