@@ -770,25 +770,29 @@ async function playKiwiServer(srvId) {
   const srv = KIWI_SERVERS.find(s => s.id === srvId);
   if (!srv) return;
 
+  // Get episode title if available
+  const epTitle = EPISODE_TITLES_CACHE[CUR.malId]?.[CUR.ep] || '';
+  const epTitleSuffix = epTitle ? ` - ${epTitle}` : '';
+
   // Restore iframe (clean up any leftover kiwi video element)
   restoreIframePlayer();
 
   const iframe = document.getElementById('vplayer');
   iframe.src = 'about:blank';
-  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Loading…`;
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · Loading…`;
   toast(`Fetching ${srv.label} stream…`, '🥝', 4000);
 
   const data = await fetchKiwiStreams(CUR.malId, CUR.ep);
   if (!data) {
     toast(`${srv.label} failed — render may be sleeping`, '❌');
-    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Failed`;
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · Failed`;
     return;
   }
 
   const kiwiData = data.kiwi?.[srv.type];
   if (!kiwiData || kiwiData.error) {
     toast(`${srv.label} not available for this episode`, '⚠️');
-    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Not available`;
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · Not available`;
     return;
   }
 
@@ -800,7 +804,7 @@ async function playKiwiServer(srvId) {
   }
 
   iframe.src = playerUrl;
-  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}`;
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix}`;
   document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
   const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
   if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
@@ -814,29 +818,33 @@ async function playVidWishRealid(srvId) {
   const srv = VIDWISH_REALID_SERVERS.find(s => s.id === srvId);
   if (!srv) return;
 
+  // Get episode title if available
+  const epTitle = EPISODE_TITLES_CACHE[CUR.malId]?.[CUR.ep] || '';
+  const epTitleSuffix = epTitle ? ` - ${epTitle}` : '';
+
   restoreIframePlayer();
   const iframe = document.getElementById('vplayer');
   iframe.src = 'about:blank';
-  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Loading…`;
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · Loading…`;
   toast(`Fetching ${srv.label} stream…`, '🎬', 4000);
 
   const data = await fetchKiwiStreams(CUR.malId, CUR.ep);
   if (!data) {
     toast(`${srv.label} failed — render may be sleeping`, '❌');
-    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · Failed`;
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · Failed`;
     return;
   }
 
   const realid = data.realid;
   if (!realid) {
     toast(`${srv.label} — realid not found for this episode`, '⚠️');
-    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · No realid`;
+    document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix} · No realid`;
     return;
   }
 
   const url = `https://vidwish.live/stream/s-2/${realid}/${srv.type}?autostart=true`;
   iframe.src = url;
-  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep} · realid:${realid}`;
+  document.getElementById('wep-lbl').textContent = `${srv.label} · Ep ${CUR.ep}${epTitleSuffix}`;
   document.querySelectorAll('.epbtn').forEach((b,i) => b.classList.toggle('on', i+1===CUR.ep));
   const activeBtn = document.getElementById(`epbtn-${CUR.ep}`);
   if (activeBtn) activeBtn.scrollIntoView({ block:'nearest', behavior:'smooth' });
@@ -1347,7 +1355,9 @@ function renderWatchInfo(a){
 
 function makeAnimeCard(a){
   const c=document.createElement('div'); c.className='acard';
-  c.innerHTML=`<img src="${getImg(a)}" class="acard-img" loading="lazy" onerror="this.src='${FALLBACK}'"><div class="acard-ov"><div class="acard-play"><i class="fas fa-play"></i></div><div class="acard-ttl">${getTitle(a)}</div><div class="acard-sub">⭐ ${a.score||'N/A'}</div></div>`;
+  const year = a.year || (a.aired?.from ? new Date(a.aired.from).getFullYear() : '');
+  const yearText = year ? ` · ${year}` : '';
+  c.innerHTML=`<img src="${getImg(a)}" class="acard-img" loading="lazy" onerror="this.src='${FALLBACK}'"><div class="acard-ov"><div class="acard-play"><i class="fas fa-play"></i></div><div class="acard-ttl">${getTitle(a)}</div><div class="acard-sub">⭐ ${a.score||'N/A'}${yearText}</div></div>`;
   c.onclick=()=>openAnime(a); return c;
 }
 
